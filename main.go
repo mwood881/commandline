@@ -37,7 +37,7 @@ var rootCmd = &cobra.Command{
 		// CSV to JSON
 		err := convertCSVtoJSON(inputFile, outputFile)
 		if err != nil {
-			fmt.Printf("Error", err)
+			fmt.Printf("Error: reading file failed", err)
 		}
 		fmt.Println("Converted successfully")
 	},
@@ -63,10 +63,8 @@ func convertCSVtoJSON(inputPath, outputPath string) error {
 	}
 	headers := records[0]
 
-	//Ensure headers match format
-	expectedHeaders := []string{"value", "income", "age", "rooms", "bedrooms", "pop", "hh"}
-	if len(headers) != len(expectedHeaders) {
-		return errors.New("CSV headers do not match expected structure")
+	if len(headers) != 7 {
+		return errors.New("CSV headers do not match structure")
 	}
 
 	//Open output JSON file
@@ -76,8 +74,11 @@ func convertCSVtoJSON(inputPath, outputPath string) error {
 	}
 	defer outFile.Close()
 
+	// Write opening bracket for the JSON array
+	outFile.Write([]byte("[\n"))
+
 	//  write to JSON Lines with CSV data
-	for _, record := range records[1:] {
+	for i, record := range records[1:] {
 		house, err := parseRecord(record)
 		if err != nil {
 			return fmt.Errorf("error", err)
@@ -88,19 +89,30 @@ func convertCSVtoJSON(inputPath, outputPath string) error {
 			return fmt.Errorf("error with JSON", err)
 		}
 
-		// Write JSON data to file followed by a newline
+		// Write JSON data to file
 		_, err = outFile.Write(jsonData)
 		if err != nil {
-			return fmt.Errorf("error writing to output file: %v", err)
+			return fmt.Errorf("error writing to output file", err)
 		}
 
 		// Write a newline after each JSON object to separate entries
 		_, err = outFile.Write([]byte("\n"))
 		if err != nil {
-			return fmt.Errorf("error writing newline to output file: %v", err)
+			return fmt.Errorf("error writing newline to output file", err)
 		}
-
+		// Check if this is the last record
+		if i < len(records)-2 {
+			// Not the last record, write a comma after it
+			outFile.Write([]byte(",\n"))
+		} else {
+			// For the last record, write only a newline (no comma)
+			outFile.Write([]byte("\n"))
+		}
 	}
+	// Write closing bracket for the JSON array
+	outFile.Write([]byte("]\n"))
+	// Remember the JSONlist needs brackets and then commas after each object in the file
+	//Therefore, it looks like this [{object1}, {object2}]
 
 	return nil
 
