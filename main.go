@@ -1,12 +1,15 @@
 package main
 
 import (
-	"errors"
-	"strconv"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
+
+	// import the newest version of cobra after installing the latest version
+	"github.com/spf13/cobra"
 )
 
 type House struct {
@@ -19,118 +22,148 @@ type House struct {
 	HH       int     `json:"hh"`
 }
 
-func main() {
-	// Check if number of arguments provided is correct
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: ./main <input_csv_file> <output_json_file>")
-		os.Exit(1)
-	}
+// cobra uses var for input and output files
 
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
+var inputFile string
+var outputFile string
 
-	// Try converting CSV to JSON Line, if there is something wrong show an error
-	err := convertCSVtoJSON(inputFile, outputFile)
-	if err != nil {
-		fmt.Println("Error":, err)
-		os.Exit(1)
-	}
+//Include root command with cmd from cobra
 
-	fmt.Println("Conversion was successful!")
+var rootCmd = &cobra.Command{
+	Use:   "csv2json",
+	Short: "Convert CSV to JSON",
+	Long:  "A program that converts CSV files to JSON lines partficularly for the example house data",
+	Run: func(cmd *cobra.Command, args []string) {
+		// CSV to JSON
+		err := convertCSVtoJSON(inputFile, outputFile)
+		if err != nil {
+			fmt.Printf("Error", err)
+		}
+		fmt.Println("Converted successfully")
+	},
 }
 
+// Conversion function
 func convertCSVtoJSON(inputPath, outputPath string) error {
-	//Open the input CSV file
 	file, err := os.Open(inputPath)
 	if err != nil {
-		return fmt.Errorf("could not open the CSV file: %v", err)
+		return fmt.Errorf("input file failed", err)
 	}
 	defer file.Close()
-
-	//Read all of the CSV file records
 	reader := csv.NewReader(file)
+
 	records, err := reader.ReadAll()
 	if err != nil {
-		return fmt.Errorf("could not read the CSV file: %v", err)
+		return fmt.Errorf("reading file failed", err)
 	}
 
-	// If the file is empty, return an error
+	// CSV structure correct
 	if len(records) < 1 {
-		return errors.New("CSV file is empty or improperly formatted")
+		return errors.New("CSV file not formatted right")
 	}
-	//Check the headers
 	headers := records[0]
 
-	if len(headers) != 7 {
+	//Ensure headers match format
+	expectedHeaders := []string{"value", "income", "age", "rooms", "bedrooms", "pop", "hh"}
+	if len(headers) != len(expectedHeaders) {
 		return errors.New("CSV headers do not match expected structure")
 	}
 
-	// Create ouput JSON file
+	//Open output JSON file
 	outFile, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %v", err)
+		return fmt.Errorf("creating output file failure", err)
 	}
 	defer outFile.Close()
 
-	// Loop each record and converT it to JSON
+	//  write to JSON Lines with CSV data
 	for _, record := range records[1:] {
 		house, err := parseRecord(record)
 		if err != nil {
-			return err
+			return fmt.Errorf("error", err)
 		}
-// Convert house struct to JSON
+
 		jsonData, err := json.Marshal(house)
 		if err != nil {
-			return err
-//Write JSON to output file
-		_, err = outFile.Write(append(jsonData, '\n'))
+			return fmt.Errorf("error with JSON", err)
+		}
+
+		// Write JSON data to file followed by a newline
+		_, err = outFile.Write(jsonData)
 		if err != nil {
 			return fmt.Errorf("error writing to output file: %v", err)
 		}
+
+		// Write a newline after each JSON object to separate entries
+		_, err = outFile.Write([]byte("\n"))
+		if err != nil {
+			return fmt.Errorf("error writing newline to output file: %v", err)
+		}
+
 	}
 
 	return nil
+
 }
 
+// Function for CSV reading in file
 func parseRecord(record []string) (House, error) {
 	if len(record) != 7 {
-		return House{}, errors.New("record has wrong number of fields")
+		return House{}, errors.New("invalid length")
 	}
-//Handle errors in each field
+
 	value, err := strconv.ParseFloat(record[0], 64)
 	if err != nil {
-		return House{}, err
+		return House{}, fmt.Errorf("invalid value", err)
 	}
 
 	income, err := strconv.ParseFloat(record[1], 64)
 	if err != nil {
-		return House{}, err
+		return House{}, fmt.Errorf("invalid income", err)
 	}
 
 	age, err := strconv.Atoi(record[2])
 	if err != nil {
-		return House{}, err
+		return House{}, fmt.Errorf("invalid age", err)
 	}
 
 	rooms, err := strconv.Atoi(record[3])
 	if err != nil {
-		return House{}, err
+		return House{}, fmt.Errorf("invalid rooms", err)
 	}
 
 	bedrooms, err := strconv.Atoi(record[4])
 	if err != nil {
-		return House{}, err
+		return House{}, fmt.Errorf("invalid bedrooms", err)
 	}
 
 	pop, err := strconv.Atoi(record[5])
 	if err != nil {
-		return House{}, err
+		return House{}, fmt.Errorf("invalid pop", err)
 	}
 
 	hh, err := strconv.Atoi(record[6])
 	if err != nil {
-		return House{}, err
+		return House{}, fmt.Errorf("invalid hh", err)
 	}
-//Return populated house struct
+
 	return House{value, income, age, rooms, bedrooms, pop, hh}, nil
+}
+
+func init() {
+	// Define flags
+	rootCmd.PersistentFlags().StringVarP(&inputFile, "input", "i", "", "Path to the input CSV file")
+	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "Path to the output JSON file")
+
+	// Mark flags as required
+	rootCmd.MarkPersistentFlagRequired("input")
+	rootCmd.MarkPersistentFlagRequired("output")
+}
+
+func main() {
+	// Execute the root command
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
